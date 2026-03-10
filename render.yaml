@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: eth-telegram-bot
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn eth_super_analyzer:app
+    plan: free
+    envVars:
+      - key: TELEGRAM_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false

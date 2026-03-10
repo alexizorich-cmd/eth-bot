@@ -1,0 +1,6 @@
+requests
+pandas
+pandas-ta
+feedparser
+flask
+gunicorn
