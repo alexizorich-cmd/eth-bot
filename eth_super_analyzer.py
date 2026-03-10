@@ -3,33 +3,24 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 import time
-import sys
 import traceback
 from collections import Counter
 import feedparser
 import os
+import threading
 from flask import Flask
-from threading import Thread
 
 # ========== ПОЛУЧАЕМ НАСТРОЙКИ ИЗ ПЕРЕМЕННЫХ ОКРУЖЕНИЯ ==========
 TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
 TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
 # ================================================================
 
-# Запускаем веб-сервер в отдельном потоке
+# Создаём Flask приложение для Gunicorn
 app = Flask(__name__)
 
 @app.route('/')
 def home():
     return "🤖 Бот для анализа ETH работает и отслеживает рынок!"
-
-def run_web():
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000)))
-
-web_thread = Thread(target=run_web)
-web_thread.daemon = True
-web_thread.start()
-print("🌐 Веб-сервер запущен")
 
 class TelegramNotifier:
     """Класс для отправки уведомлений в Telegram"""
@@ -578,6 +569,7 @@ class AdvancedETHAnalyzer:
 
 
 def run_auto_mode():
+    """Автоматический режим работы бота"""
     print("🔄 Запущен автоматический режим")
     print("⏱️ Анализ будет выполняться каждые 15 минут")
     
@@ -595,24 +587,38 @@ def run_auto_mode():
             print("\n" + " " * 50, end='\r')
             
         except Exception as e:
-            print(f"❌ Ошибка: {e}")
+            print(f"❌ Ошибка в цикле анализа: {e}")
             time.sleep(60)
 
 
+# ========== ТОЧКА ВХОДА ==========
 if __name__ == "__main__":
     print("🚀 ЗАПУСК СУПЕР-АНАЛИЗАТОРА ETH/USDT")
     print("="*50)
     print("✅ Без API ключей, без регистрации, полностью бесплатно!")
     print("="*50)
-    
+
+    # Проверяем токены Telegram
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
         print("❌ ОШИБКА: Не заданы переменные окружения TELEGRAM_TOKEN и TELEGRAM_CHAT_ID")
-    
+        print("   Бот будет работать, но без Telegram уведомлений")
+
+    # Проверяем подключение к Binance
     try:
         test_response = requests.get("https://api.binance.com/api/v3/ping", timeout=5)
         if test_response.status_code == 200:
             print("✅ Подключение к Binance: ОК")
     except:
         print("❌ Нет подключения к Binance. Проверь интернет!")
+
+    # Запускаем бота в отдельном потоке
+    print("\n🤖 Запуск бота в фоновом режиме...")
+    bot_thread = threading.Thread(target=run_auto_mode)
+    bot_thread.daemon = True
+    bot_thread.start()
+    print("✅ Бот успешно запущен и будет анализировать каждые 15 минут")
+    print("🌐 Веб-интерфейс доступен по URL сервиса")
     
-    run_auto_mode()
+    # Бесконечное ожидание (Gunicorn управляет процессом)
+    while True:
+        time.sleep(60)
