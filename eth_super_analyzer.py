@@ -613,12 +613,18 @@ if __name__ == "__main__":
 
     # Запускаем бота в отдельном потоке
     print("\n🤖 Запуск бота в фоновом режиме...")
-    bot_thread = threading.Thread(target=run_auto_mode)
+    
+    def run_bot():
+        try:
+            run_auto_mode()
+        except Exception as e:
+            print(f"❌ Ошибка в потоке бота: {e}")
+    
+    bot_thread = threading.Thread(target=run_bot)
     bot_thread.daemon = True
     bot_thread.start()
-    print("✅ Бот успешно запущен и будет анализировать каждые 15 минут")
-    print("🌐 Веб-интерфейс доступен по URL сервиса")
+    print("✅ Бот запущен в фоновом режиме")
     
-    # Бесконечное ожидание (Gunicorn управляет процессом)
-    while True:
-        time.sleep(60)
+    # ВАЖНО: Не блокируем выполнение, а передаём управление Gunicorn
+    # Gunicorn сам будет обрабатывать запросы к Flask-приложению
+    print("🌐 Веб-интерфейс доступен по URL сервиса")
