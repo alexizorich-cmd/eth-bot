@@ -1,6 +1,7 @@
-requests
-pandas
-pandas-ta
-feedparser
-flask
-gunicorn
+numpy==1.26.4
+pandas==2.2.3
+pandas-ta==0.3.14b0
+requests==2.31.0
+feedparser==6.0.11
+flask==3.1.0
+gunicorn==23.0.0
