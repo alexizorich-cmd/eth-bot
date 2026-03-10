@@ -1,6 +1,5 @@
 import requests
 import pandas as pd
-import pandas_ta as ta
 import numpy as np
 from datetime import datetime
 import time
@@ -17,7 +16,7 @@ TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
 TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
 # ================================================================
 
-# Запускаем веб-сервер в отдельном потоке (чтобы Render не "усыплял" бота)
+# Запускаем веб-сервер в отдельном потоке
 app = Flask(__name__)
 
 @app.route('/')
@@ -25,12 +24,12 @@ def home():
     return "🤖 Бот для анализа ETH работает и отслеживает рынок!"
 
 def run_web():
-    app.run(host='0.0.0.0', port=10000)
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000)))
 
 web_thread = Thread(target=run_web)
 web_thread.daemon = True
 web_thread.start()
-print("🌐 Веб-сервер запущен на порту 10000")
+print("🌐 Веб-сервер запущен")
 
 class TelegramNotifier:
     """Класс для отправки уведомлений в Telegram"""
@@ -39,10 +38,9 @@ class TelegramNotifier:
         self.token = token
         self.chat_id = chat_id
         self.base_url = f"https://api.telegram.org/bot{token}"
-        self.last_signals = {}  # Чтобы не спамить одинаковыми сигналами
+        self.last_signals = {}
     
     def send_message(self, text):
-        """Отправляет сообщение в Telegram"""
         try:
             url = f"{self.base_url}/sendMessage"
             data = {
@@ -62,29 +60,22 @@ class TelegramNotifier:
             return False
     
     def should_send_signal(self, signal_key, confidence, threshold=80):
-        """Проверяет, нужно ли отправлять сигнал (чтобы не спамить)"""
-        # Если уверенность ниже порога - не отправляем
         if confidence < threshold:
             return False
         
-        # Проверяем, отправляли ли такой сигнал в последние 30 минут
         current_time = time.time()
         if signal_key in self.last_signals:
             last_time, last_conf = self.last_signals[signal_key]
-            # Если прошло меньше 30 минут и уверенность изменилась не сильно - не отправляем
             if current_time - last_time < 1800 and abs(confidence - last_conf) < 10:
                 return False
         
-        # Запоминаем сигнал
         self.last_signals[signal_key] = (current_time, confidence)
         return True
     
     def format_signal_message(self, tf_name, signals, last):
-        """Форматирует сигнал для отправки в Telegram"""
         rec = signals['recommendation']
         conf = signals['confidence']
         
-        # Выбираем эмодзи в зависимости от рекомендации
         if "ПОКУПКА" in rec:
             main_emoji = "🟢"
         elif "ПРОДАЖА" in rec:
@@ -92,7 +83,6 @@ class TelegramNotifier:
         else:
             main_emoji = "⚪"
         
-        # Формируем сообщение
         message = f"""
 {main_emoji} <b>СИГНАЛ ПО ETH/USDT</b> {main_emoji}
 
@@ -116,7 +106,6 @@ class TelegramNotifier:
         return message
     
     def send_signal_if_needed(self, tf_name, signals, last):
-        """Отправляет сигнал, если он достаточно сильный"""
         signal_key = f"{tf_name}_{signals['recommendation']}"
         if self.should_send_signal(signal_key, signals['confidence']):
             message = self.format_signal_message(tf_name, signals, last)
@@ -124,10 +113,9 @@ class TelegramNotifier:
 
 
 class NewsSentimentAnalyzer:
-    """Класс для работы с новостями через RSS - БЕСПЛАТНО, БЕЗ КЛЮЧЕЙ!"""
+    """Класс для работы с новостями через RSS"""
     
     def __init__(self):
-        # Важные события для Ethereum
         self.important_events = {
             'ethereum upgrade': 3, 'eth upgrade': 3,
             'ethereum hardfork': 4, 'eth hardfork': 4,
@@ -145,7 +133,6 @@ class NewsSentimentAnalyzer:
         }
     
     def get_crypto_news(self, limit=30):
-        """Получает новости из RSS-лент"""
         rss_feeds = [
             'https://cointelegraph.com/rss/tag/ethereum',
             'https://coindesk.com/arc/outboundfeeds/rss/',
@@ -184,7 +171,6 @@ class NewsSentimentAnalyzer:
         return news_list[:limit]
     
     def simple_sentiment_analysis(self, text):
-        """Простой анализ тональности на основе ключевых слов"""
         text_lower = text.lower()
         
         positive_words = ['bull', 'bullish', 'surge', 'soar', 'jump', 'rally', 'gain', 'rise',
@@ -209,7 +195,6 @@ class NewsSentimentAnalyzer:
         return max(-1, min(1, score))
     
     def get_sentiment_label(self, score):
-        """Преобразует числовую оценку в текстовую метку"""
         if score >= 0.2:
             return "🟢 ПОЗИТИВ"
         elif score <= -0.2:
@@ -218,7 +203,6 @@ class NewsSentimentAnalyzer:
             return "⚪ НЕЙТРАЛЬНО"
     
     def check_event_importance(self, text):
-        """Проверяет, есть ли в тексте важные события"""
         importance = 0
         for event, weight in self.important_events.items():
             if event in text:
@@ -226,7 +210,6 @@ class NewsSentimentAnalyzer:
         return importance
     
     def get_news_summary(self, news_list):
-        """Формирует сводку по новостям"""
         if not news_list:
             return {'total': 0, 'positive': 0, 'neutral': 0, 'negative': 0, 
                     'avg_sentiment': 0.0, 'top_news': [], 'important_events': []}
@@ -273,7 +256,6 @@ class AdvancedETHAnalyzer:
         self.telegram = TelegramNotifier(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID)
         
     def get_historical_data(self, interval='1h', limit=200):
-        """Получает исторические данные с Binance"""
         try:
             endpoint = f"{self.base_url}/klines"
             params = {'symbol': self.symbol, 'interval': interval, 'limit': limit}
@@ -310,32 +292,39 @@ class AdvancedETHAnalyzer:
             return None
     
     def calculate_advanced_indicators(self, df):
-        """Рассчитывает расширенный набор индикаторов"""
+        """Ручной расчёт индикаторов без pandas-ta"""
         try:
-            df['rsi'] = ta.rsi(df['close'], length=14)
-            df['ema_7'] = ta.ema(df['close'], length=7)
-            df['ema_20'] = ta.ema(df['close'], length=20)
-            df['ema_50'] = ta.ema(df['close'], length=50)
+            # RSI
+            delta = df['close'].diff()
+            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+            rs = gain / loss
+            df['rsi'] = 100 - (100 / (1 + rs))
             
-            macd = ta.macd(df['close'])
-            for col in macd.columns:
-                df[col] = macd[col]
+            # EMA
+            df['ema_7'] = df['close'].ewm(span=7, adjust=False).mean()
+            df['ema_20'] = df['close'].ewm(span=20, adjust=False).mean()
+            df['ema_50'] = df['close'].ewm(span=50, adjust=False).mean()
             
-            bb = ta.bbands(df['close'], length=20, std=2)
-            bb_cols = bb.columns
-            if len(bb_cols) >= 3:
-                df['BB_lower'] = bb[bb_cols[0]]
-                df['BB_middle'] = bb[bb_cols[1]]
-                df['BB_upper'] = bb[bb_cols[2]]
+            # MACD
+            exp1 = df['close'].ewm(span=12, adjust=False).mean()
+            exp2 = df['close'].ewm(span=26, adjust=False).mean()
+            df['MACD_12_26_9'] = exp1 - exp2
+            df['MACDs_12_26_9'] = df['MACD_12_26_9'].ewm(span=9, adjust=False).mean()
+            
+            # Bollinger Bands
+            df['BB_middle'] = df['close'].rolling(window=20).mean()
+            bb_std = df['close'].rolling(window=20).std()
+            df['BB_upper'] = df['BB_middle'] + (bb_std * 2)
+            df['BB_lower'] = df['BB_middle'] - (bb_std * 2)
             
             return df
             
         except Exception as e:
-            print(f"❌ Ошибка при расчете индикаторов: {e}")
+            print(f"❌ Ошибка при расчёте индикаторов: {e}")
             return df
     
     def find_support_resistance(self, df, window=20):
-        """Находит ближайшие уровни поддержки и сопротивления"""
         try:
             current_price = df['close'].iloc[-1]
             
@@ -358,7 +347,6 @@ class AdvancedETHAnalyzer:
             return None, None
     
     def get_detailed_signal(self, df, news_summary):
-        """Детальный анализ с учетом новостей"""
         try:
             if df is None or len(df) < 50:
                 return None, None
@@ -496,10 +484,9 @@ class AdvancedETHAnalyzer:
             return None, None
     
     def print_complete_analysis(self):
-        """Полный анализ с новостями и отправкой в Telegram"""
         try:
             print("\n" + "="*80)
-            print("🐋 СУПЕР-АНАЛИЗАТОР ETH/USDT (Тех. анализ + Новости + Telegram)")
+            print("🐋 СУПЕР-АНАЛИЗАТОР ETH/USDT")
             print(f"📅 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
             print("="*80)
             
@@ -572,7 +559,6 @@ class AdvancedETHAnalyzer:
                         else:
                             print(f"\n⚪ РЕКОМЕНДАЦИЯ: {rec}")
                         
-                        # Отправляем сильные сигналы в Telegram
                         if conf >= 80:
                             self.telegram.send_signal_if_needed(name, signals, last)
                     else:
@@ -584,7 +570,6 @@ class AdvancedETHAnalyzer:
             
             print("\n" + "="*80)
             print("📢 Помни: даже супер-анализ не гарантирует прибыль!")
-            print("   Всегда используй риск-менеджмент.")
             print("="*80)
             
         except Exception as e:
@@ -593,7 +578,6 @@ class AdvancedETHAnalyzer:
 
 
 def run_auto_mode():
-    """Автоматический режим работы"""
     print("🔄 Запущен автоматический режим")
     print("⏱️ Анализ будет выполняться каждые 15 минут")
     
@@ -605,7 +589,6 @@ def run_auto_mode():
             print("\n⏳ Следующий анализ через 15 минут...")
             print("-" * 50)
             
-            # Ждем 15 минут (900 секунд)
             for i in range(15, 0, -1):
                 print(f"⏰ До следующего анализа: {i} мин", end='\r')
                 time.sleep(60)
@@ -620,18 +603,11 @@ if __name__ == "__main__":
     print("🚀 ЗАПУСК СУПЕР-АНАЛИЗАТОРА ETH/USDT")
     print("="*50)
     print("✅ Без API ключей, без регистрации, полностью бесплатно!")
-    print(f"✅ Telegram бот: @Morning_ETH_Strategy_bot")
     print("="*50)
     
-    # Проверяем наличие токенов
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
         print("❌ ОШИБКА: Не заданы переменные окружения TELEGRAM_TOKEN и TELEGRAM_CHAT_ID")
-        print("   На Render они будут добавлены позже")
-        # Для локального теста можно раскомментировать:
-        # TELEGRAM_TOKEN = "8707523862:AAGXt9MtCpJ6R3C6kZ2pf2GvEoE_owu_ojs"
-        # TELEGRAM_CHAT_ID = "6330229233"
     
-    # Проверяем подключение к Binance
     try:
         test_response = requests.get("https://api.binance.com/api/v3/ping", timeout=5)
         if test_response.status_code == 200:
@@ -639,5 +615,4 @@ if __name__ == "__main__":
     except:
         print("❌ Нет подключения к Binance. Проверь интернет!")
     
-    # Запускаем автоматический режим
     run_auto_mode()
